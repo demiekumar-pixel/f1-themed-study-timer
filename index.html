@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>F1 Study Timer</title>
+<style>
+:root{--bg:#101215;--panel:#1a1d21;--line:#2c3036;--tx:#ececec;--mut:#8b929b;--red:#e10600;--amb:#ffb000}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:"Bahnschrift","DIN Alternate","Arial Narrow",Arial,sans-serif;min-height:100vh}
+.screen{display:none;max-width:1080px;margin:0 auto;padding:28px 24px 40px}
+.screen.on{display:block}
+h1{margin:0 0 4px;font-size:34px;letter-spacing:.5px;font-weight:700}
+h1 i{display:inline-block;width:42px;height:6px;background:var(--red);margin-right:12px;vertical-align:middle}
+.sub{color:var(--mut);margin:0 0 24px}
+h2{font-size:16px;margin:26px 0 10px;font-weight:600;color:var(--amb)}
+.row{display:flex;gap:14px;flex-wrap:wrap}
+.card{background:var(--panel);border:2px solid var(--line);border-radius:6px;padding:12px;cursor:pointer;color:inherit;font:inherit;text-align:left;transition:border-color .15s}
+.card:hover{border-color:#555}
+.card.sel{border-color:var(--red)}
+.card:focus-visible,.btn:focus-visible,input:focus-visible{outline:2px solid var(--amb);outline-offset:2px}
+.track{width:236px}
+.track svg{width:100%;height:120px;display:block;margin-bottom:8px}
+.track b,.car b{display:block;font-size:16px}
+.track span,.car span{color:var(--mut);font-size:13px}
+.car{width:236px;display:flex;align-items:center;gap:12px}
+.car svg{width:84px;height:40px;flex:none}
+.time{padding:12px 20px;font-size:18px;font-weight:600;min-width:84px;text-align:center}
+.custom{display:flex;align-items:center;gap:8px;color:var(--mut)}
+.custom input{width:84px;background:var(--panel);border:2px solid var(--line);border-radius:6px;color:var(--tx);font:inherit;font-size:18px;padding:10px;text-align:center}
+.custom input.sel{border-color:var(--red)}
+.btn{background:var(--red);color:#fff;border:0;border-radius:6px;font:inherit;font-size:18px;font-weight:700;padding:14px 34px;cursor:pointer;letter-spacing:.5px}
+.btn:disabled{background:#33373d;color:#6b7078;cursor:not-allowed}
+.btn.ghost{background:transparent;border:2px solid var(--line);color:var(--tx)}
+.btn.ghost:hover{border-color:#666}
+#go{margin-top:30px}
+.bar{display:flex;justify-content:space-between;align-items:center;background:var(--panel);border-left:6px solid var(--red);border-radius:4px;padding:12px 18px;font-size:18px;gap:16px;flex-wrap:wrap}
+.bar .lap{color:var(--amb);font-weight:700;font-size:22px;font-variant-numeric:tabular-nums}
+.bar .car-n{display:flex;align-items:center;gap:10px}
+.dot{width:14px;height:14px;border-radius:50%;display:inline-block}
+.stage{position:relative;margin:16px 0 8px;background:#0b0c0e;border:1px solid var(--line);border-radius:6px}
+#map{width:100%;height:auto;max-height:52vh;display:block}
+#clock{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none}
+#clock div{font-family:Consolas,Menlo,"Courier New",monospace;font-weight:700;font-size:min(13vw,128px);line-height:1;font-variant-numeric:tabular-nums;color:var(--amb);text-shadow:0 0 24px rgba(255,176,0,.25)}
+#clock small{display:block;margin-top:8px;color:var(--mut);font-size:14px}
+.prog{height:8px;background:var(--panel);border-radius:4px;overflow:hidden}
+.prog i{display:block;height:100%;width:0;background:var(--red)}
+.ctrl{display:flex;gap:12px;justify-content:center;margin-top:20px}
+#abort{display:none}
+.paused #abort{display:inline-block}
+.paused #clock div{opacity:.45}
+#done{text-align:center;padding-top:0}
+.flag{height:120px;margin:0 -24px 30px;background:repeating-conic-gradient(#fff 0 25%,#111 0 50%) 0 0/48px 48px;animation:wave 1.4s linear infinite}
+@keyframes wave{to{background-position:96px 0}}
+#done h1{font-size:46px}
+.sum{display:inline-grid;grid-template-columns:auto auto;gap:8px 28px;text-align:left;margin:24px 0 34px;font-size:18px}
+.sum dt{color:var(--mut)}.sum dd{margin:0;font-weight:700}
+@media (prefers-reduced-motion:reduce){.flag{animation:none}}
+</style>
+</head>
+<body>
+
+<section class="screen on" id="setup">
+  <h1><i></i>F1 Study Timer</h1>
+  <p class="sub">Pick a circuit, a car and a race length. The race ends when your study session does.</p>
+  <h2>Circuit</h2><div class="row" id="tracks"></div>
+  <h2>Car</h2><div class="row" id="cars"></div>
+  <h2>Race length</h2>
+  <div class="row" id="times" style="align-items:center"></div>
+  <button class="btn" id="go" disabled>START RACE</button>
+</section>
+
+<section class="screen" id="race">
+  <div class="bar">
+    <span id="tn"></span><span class="lap" id="lap"></span>
+    <span class="car-n"><span class="dot" id="cd"></span><span id="cn"></span></span>
+  </div>
+  <div class="stage">
+    <svg id="map" viewBox="0 0 800 500"></svg>
+    <div id="clock"><div id="t">00:00</div><small id="st">Remaining</small></div>
+  </div>
+  <div class="prog"><i id="pb"></i></div>
+  <div class="ctrl">
+    <button class="btn ghost" id="pause">PAUSE</button>
+    <button class="btn ghost" id="abort">ABORT RACE</button>
+  </div>
+</section>
+
+<section class="screen" id="done">
+  <div class="flag"></div>
+  <h1>Chequered flag</h1>
+  <p class="sub">Session complete. Take a break.</p>
+  <dl class="sum" id="sum"></dl><br>
+  <button class="btn" id="again">NEW RACE</button>
+</section>
+
+<script>
+const TRACKS=[
+ {id:'mc',name:'Circuit de Monaco',short:'Monaco',country:'Monaco',
+  d:'M560 410L690 390C735 382 745 335 705 315L590 255C550 235 520 200 470 205C420 210 410 255 365 255C325 255 300 225 265 240C230 255 245 300 285 300C330 300 340 270 375 290C410 310 380 360 330 370C270 382 200 360 150 380C100 400 110 440 170 445L480 430C530 425 540 412 560 410Z'},
+ {id:'sv',name:'Silverstone Circuit',short:'Silverstone',country:'United Kingdom',
+  d:'M250 400L560 400C620 400 650 380 660 340C670 300 640 280 600 285C560 290 570 250 600 230C640 205 650 160 610 140C570 120 520 150 500 190C480 230 440 220 420 180C400 140 340 120 300 150C260 180 290 230 250 250C200 275 150 300 140 340C130 385 190 400 250 400Z'},
+ {id:'mz',name:'Autodromo Nazionale di Monza',short:'Monza',country:'Italy',
+  d:'M180 400L580 400C640 400 690 360 680 300C672 255 640 240 600 245L520 255C480 260 470 220 500 200L560 150C590 125 570 90 530 95L250 110C190 115 150 150 150 210L150 330C150 370 160 400 180 400Z'}
+];
+const CARS=[
+ {name:'Scarlet Arrow',body:'#e10600',acc:'#ffffff'},
+ {name:'Midnight Silver',body:'#1b2a6b',acc:'#c5ccd6'},
+ {name:'Papaya Rocket',body:'#ff8000',acc:'#222222'},
+ {name:'Emerald Phantom',body:'#0b6b4f',acc:'#00e0a8'}
+];
+const PRESETS=[25,45,60,90];
+const $=id=>document.getElementById(id);
+const sel={track:null,car:null,mins:null};
+
+function carShape(c){
+  return `<rect x="-17" y="-7" width="4" height="14" fill="${c.acc}"/>
+  <rect x="-10" y="-7.5" width="6" height="3.5" rx="1" fill="#0a0a0a"/><rect x="-10" y="4" width="6" height="3.5" rx="1" fill="#0a0a0a"/>
+  <rect x="7" y="-7" width="5" height="3" rx="1" fill="#0a0a0a"/><rect x="7" y="4" width="5" height="3" rx="1" fill="#0a0a0a"/>
+  <path d="M-14-2.5H4L15-1V1L4 2.5H-14Z" fill="${c.body}"/>
+  <rect x="14" y="-7" width="3" height="14" fill="${c.acc}"/>
+  <circle cx="-2" cy="0" r="2.2" fill="${c.acc}"/>`;
+}
+function carIcon(c){return `<svg viewBox="-20 -10 40 20">${carShape(c)}</svg>`}
+
+// ---- setup screen ----
+$('tracks').innerHTML=TRACKS.map((t,i)=>`<button class="card track" data-i="${i}">
+ <svg viewBox="100 70 640 400"><path d="${t.d}" fill="none" stroke="#e8e8e8" stroke-width="16" stroke-linejoin="round"/></svg>
+ <b>${t.name}</b><span>${t.country}</span></button>`).join('');
+$('cars').innerHTML=CARS.map((c,i)=>`<button class="card car" data-i="${i}">${carIcon(c)}
+ <div><b>${c.name}</b><span style="display:flex;gap:6px;margin-top:6px"><i class="dot" style="background:${c.body}"></i><i class="dot" style="background:${c.acc}"></i></span></div></button>`).join('');
+$('times').innerHTML=PRESETS.map(m=>`<button class="card time" data-m="${m}">${m} min</button>`).join('')+
+ `<label class="custom">or <input id="cust" type="number" min="1" max="180" step="1" placeholder="1-180"> min</label>`;
+
+function refresh(){
+  document.querySelectorAll('.track').forEach(e=>e.classList.toggle('sel',+e.dataset.i===sel.track));
+  document.querySelectorAll('.car').forEach(e=>e.classList.toggle('sel',+e.dataset.i===sel.car));
+  document.querySelectorAll('.time').forEach(e=>e.classList.toggle('sel',+e.dataset.m===sel.mins&&!$('cust').value));
+  $('cust').classList.toggle('sel',!!$('cust').value&&sel.mins!==null);
+  $('go').disabled=!(sel.track!==null&&sel.car!==null&&sel.mins);
+}
+$('tracks').onclick=e=>{const b=e.target.closest('.track');if(b){sel.track=+b.dataset.i;refresh()}};
+$('cars').onclick=e=>{const b=e.target.closest('.car');if(b){sel.car=+b.dataset.i;refresh()}};
+$('times').onclick=e=>{const b=e.target.closest('.time');if(b){$('cust').value='';sel.mins=+b.dataset.m;refresh()}};
+$('cust').oninput=()=>{
+  const v=$('cust').value,n=Number(v);
+  sel.mins=(v!==''&&Number.isInteger(n)&&n>=1&&n<=180)?n:null;
+  refresh();
+};
+
+// ---- audio ----
+let ac=null;
+function beep(freq,start,dur,type='square',vol=.12){
+  if(!ac)return;
+  const o=ac.createOscillator(),g=ac.createGain(),t=ac.currentTime+start;
+  o.type=type;o.frequency.value=freq;
+  g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(.001,t+dur);
+  o.connect(g).connect(ac.destination);o.start(t);o.stop(t+dur);
+}
+
+// ---- race ----
+let R=null;
+function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on',s.id===id))}
+const fmt=ms=>{const s=Math.max(0,Math.ceil(ms/1000));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
+
+function startRace(){
+  const tr=TRACKS[sel.track],car=CARS[sel.car];
+  try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();ac.resume()}catch(e){ac=null}
+  const total=sel.mins*60000,laps=Math.max(1,Math.round(sel.mins/4));
+  $('map').innerHTML=`
+   <path id="road" d="${tr.d}" fill="none" stroke="#e8e8e8" stroke-width="30" stroke-linejoin="round"/>
+   <path d="${tr.d}" fill="none" stroke="var(--red)" stroke-width="30" stroke-linejoin="round" stroke-dasharray="10 10"/>
+   <path d="${tr.d}" fill="none" stroke="#2a2d33" stroke-width="22" stroke-linejoin="round"/>
+   <path d="${tr.d}" fill="none" stroke="#4a4f57" stroke-width="1.5" stroke-dasharray="6 10"/>
+   <g id="sf"></g><g id="car">${carShape(car)}</g>`;
+  const road=$('road'),L=road.getTotalLength();
+  const p0=road.getPointAtLength(0),p1=road.getPointAtLength(2);
+  const a0=Math.atan2(p1.y-p0.y,p1.x-p0.x)*180/Math.PI;
+  $('sf').innerHTML=`<g transform="translate(${p0.x} ${p0.y}) rotate(${a0})"><rect x="-3" y="-11" width="6" height="22" fill="#fff"/>
+   <rect x="-3" y="-11" width="3" height="5.5" fill="#000"/><rect x="0" y="-5.5" width="3" height="5.5" fill="#000"/><rect x="-3" y="0" width="3" height="5.5" fill="#000"/><rect x="0" y="5.5" width="3" height="5.5" fill="#000"/></g>`;
+  $('tn').textContent=tr.name;$('cn').textContent=car.name;$('cd').style.background=car.body;
+  R={tr,car,total,laps,L,road,carEl:$('car'),start:performance.now(),pausedTotal:0,pauseAt:null,done:false};
+  document.body.classList.remove('paused');
+  $('pause').textContent='PAUSE';$('st').textContent='Remaining';
+  show('race');
+  // start lights
+  beep(660,0,.15);beep(660,.5,.15);beep(660,1,.15);beep(990,1.6,.4);
+  tick();
+}
+function tick(){
+  if(!R||R.done)return;
+  const now=performance.now();
+  if(R.pauseAt===null){
+    const el=now-R.start-R.pausedTotal;
+    if(el>=R.total){place(1);finish();return}
+    place(el/R.total);
+  }
+  R.raf=requestAnimationFrame(tick);
+}
+function place(p){
+  const lapF=p*R.laps,lap=Math.min(R.laps,Math.floor(lapF)+1),lp=p>=1?0:lapF%1;
+  const d=lp*R.L,a=R.road.getPointAtLength(d),b=R.road.getPointAtLength((d+2)%R.L);
+  const ang=Math.atan2(b.y-a.y,b.x-a.x)*180/Math.PI;
+  R.carEl.setAttribute('transform',`translate(${a.x} ${a.y}) rotate(${ang}) scale(1.35)`);
+  const left=R.total*(1-p);
+  $('t').textContent=fmt(left);
+  $('lap').textContent=`LAP ${p>=1?R.laps:lap} / ${R.laps}`;
+  $('pb').style.width=(p*100)+'%';
+  document.title=(R.pauseAt===null?'':'⏸ ')+fmt(left)+' · F1 Study Timer';
+}
+// background tabs throttle rAF, so also poll with a timer
+setInterval(()=>{if(R&&!R.done&&R.pauseAt===null){const el=performance.now()-R.start-R.pausedTotal;if(el>=R.total){place(1);finish()}}},500);
+
+$('pause').onclick=()=>{
+  if(!R||R.done)return;
+  if(R.pauseAt===null){
+    R.pauseAt=performance.now();cancelAnimationFrame(R.raf);
+    document.body.classList.add('paused');$('pause').textContent='RESUME';$('st').textContent='Paused';
+  }else{
+    R.pausedTotal+=performance.now()-R.pauseAt;R.pauseAt=null;
+    document.body.classList.remove('paused');$('pause').textContent='PAUSE';$('st').textContent='Remaining';
+    tick();
+  }
+};
+$('abort').onclick=()=>{
+  if(!R)return;
+  cancelAnimationFrame(R.raf);R.done=true;R=null;
+  document.title='F1 Study Timer';show('setup');
+};
+function finish(){
+  R.done=true;cancelAnimationFrame(R.raf);
+  const m=sel.mins;
+  $('sum').innerHTML=`<dt>Circuit</dt><dd>${R.tr.name}</dd><dt>Car</dt><dd>${R.car.name}</dd><dt>Duration</dt><dd>${m} min</dd><dt>Laps</dt><dd>${R.laps}</dd>`;
+  document.title='Chequered flag · F1 Study Timer';
+  show('done');
+  [523,659,784,1047].forEach((f,i)=>beep(f,i*.18,.3,'triangle',.18));
+  beep(1047,.9,.8,'triangle',.18);
+}
+$('go').onclick=startRace;
+$('again').onclick=()=>{R=null;document.title='F1 Study Timer';show('setup')};
+refresh();
+</script>
+</body>
+</html>
